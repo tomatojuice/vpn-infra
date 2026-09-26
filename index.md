@@ -256,13 +256,15 @@ Ansible
 
 ---
 
-## 📘 Documentation
+## 📘 Documentation / ドキュメント
 
-詳細な構築内容は README にまとめています。
+詳細な構築内容・Ansible Playbook・テンプレートは GitHub リポジトリで確認できます。
 
-- [README.md](./README.md)
-- [Ansible Playbooks](./playbooks/)
-- [Templates](./templates/)
+- 📖 [README](https://github.com/tomatojuice/vpn-infra/blob/main/README.md)
+- 🤖 [Ansible Playbooks](https://github.com/tomatojuice/vpn-infra/tree/main/playbooks)
+- 🧩 [Templates](https://github.com/tomatojuice/vpn-infra/tree/main/templates)
+- 🔐 [Vault Example](https://github.com/tomatojuice/vpn-infra/blob/main/inventory/group_vars/all/vault.example.yml)
+- 📦 [GitHub Repository](https://github.com/tomatojuice/vpn-infra)
 
 ---
 
@@ -321,9 +323,13 @@ Examples include:
 
 For technical details, see:
 
-- [README.md](./README.md)
-- [Playbooks](./playbooks/)
-- [Templates](./templates/)
+Technical documentation, Ansible playbooks, and templates are available in the GitHub repository.
+
+- 📖 [README](https://github.com/tomatojuice/vpn-infra/blob/main/README.md)
+- 🤖 [Ansible Playbooks](https://github.com/tomatojuice/vpn-infra/tree/main/playbooks)
+- 🧩 [Templates](https://github.com/tomatojuice/vpn-infra/tree/main/templates)
+- 🔐 [Vault Example](https://github.com/tomatojuice/vpn-infra/blob/main/inventory/group_vars/all/vault.example.yml)
+- 📦 [GitHub Repository](https://github.com/tomatojuice/vpn-infra)
 
 ---
 
