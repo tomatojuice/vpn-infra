@@ -1,0 +1,78 @@
+---
+# 🔐 Ansible Vault サンプル / Example secrets file
+#
+# このファイルは秘密情報の記入例です。
+# 実際の値を入れる場合は vault.yml にコピーして使用してください。
+#
+# This file is an example for secret variables.
+# Copy it to vault.yml and replace all placeholder values with real ones.
+#
+# 📄 Copy / コピー:
+#
+# cp inventory/group_vars/all/vault.example.yml \
+#    inventory/group_vars/all/vault.yml
+#
+# 🔒 推奨 / Recommended:
+# Ansible Vault で暗号化してください。
+# Encrypt the real vault.yml with Ansible Vault.
+#
+# ansible-vault encrypt inventory/group_vars/all/vault.yml
+#
+# ⚠️ 注意 / Warning:
+# vault.yml は Git にコミットしないでください。
+# Never commit the real vault.yml to Git.
+
+# ============================================================
+# 📧 Certbot Email / Certbot 用メールアドレス
+# ============================================================
+
+vault_certbot_email: "your-email@example.com"
+
+
+# ============================================================
+# ☁️ Cloudflare Certbot Token
+# Let's Encrypt DNS-01 認証用 Cloudflare API Token
+#
+# Cloudflare API token used by Certbot for DNS-01 challenge.
+# ============================================================
+
+vault_cloudflare_certbot_token: "YOUR_CLOUDFLARE_CERTBOT_API_TOKEN"
+
+
+# ============================================================
+# 🔄 Cloudflare DDNS Token
+# DDNS 更新用 Cloudflare API Token
+#
+# Cloudflare API token used by the DDNS update script.
+# ============================================================
+
+vault_cloudflare_ddns_token: "YOUR_CLOUDFLARE_DDNS_API_TOKEN"
+
+
+# ============================================================
+# 🌐 Xray Client UUIDs / Xray クライアント UUID
+#
+# 各端末には別々の UUID を割り当てます。
+# Assign a unique UUID to each client device.
+#
+# UUID 生成例 / Generate UUID:
+#
+# uuidgen
+# ============================================================
+
+vault_xray_uuids:
+
+  # 📱 Android
+  seeker_ramya: "00000000-0000-0000-0000-000000000001"
+
+  # 📱 Android
+  seeker_tomato: "00000000-0000-0000-0000-000000000002"
+
+  # 📱 iPhone
+  iPhone_17: "00000000-0000-0000-0000-000000000003"
+
+  # 💻 Windows PC
+  Yoga: "00000000-0000-0000-0000-000000000004"
+
+  # 🍎 MacBook Air
+  MacBookAir: "00000000-0000-0000-0000-000000000005"
