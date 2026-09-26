@@ -1,0 +1,84 @@
+---
+- name: Docker環境を構築
+  hosts: vpn_servers
+  become: true
+
+  tasks:
+
+    # ==================================================
+    # Docker公式リポジトリ
+    # ==================================================
+
+    - name: dnf-plugins-coreをインストール
+      ansible.builtin.dnf:
+        name: dnf-plugins-core
+        state: present
+
+    - name: Docker公式リポジトリの存在を確認
+      ansible.builtin.stat:
+        path: /etc/yum.repos.d/docker-ce.repo
+      register: docker_repo_file
+
+    - name: Docker公式リポジトリを追加
+      ansible.builtin.command:
+        cmd: >
+          dnf config-manager
+          --add-repo
+          https://download.docker.com/linux/centos/docker-ce.repo
+      when: not docker_repo_file.stat.exists
+
+    # ==================================================
+    # Dockerパッケージ
+    # ==================================================
+
+    - name: Docker関連パッケージをインストール
+      ansible.builtin.dnf:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+
+    # ==================================================
+    # Dockerサービス
+    # ==================================================
+
+    - name: Dockerサービスを起動・自動起動
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    # ==================================================
+    # 動作確認
+    # ==================================================
+
+    - name: Dockerバージョンを確認
+      ansible.builtin.command:
+        cmd: docker --version
+      register: docker_version
+      changed_when: false
+      check_mode: false
+
+    - name: Docker Composeバージョンを確認
+      ansible.builtin.command:
+        cmd: docker compose version
+      register: compose_version
+      changed_when: false
+      check_mode: false
+
+    - name: Dockerサービス状態を確認
+      ansible.builtin.command:
+        cmd: systemctl is-active docker
+      register: docker_status
+      changed_when: false
+      check_mode: false
+
+    - name: Docker構築結果を表示
+      ansible.builtin.debug:
+        msg:
+          - "{{ docker_version.stdout }}"
+          - "{{ compose_version.stdout }}"
+          - "Docker service: {{ docker_status.stdout }}"

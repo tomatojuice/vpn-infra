@@ -1,0 +1,99 @@
+---
+- name: Cloudflare DDNS環境を構築
+  hosts: vpn_servers
+  become: true
+
+  tasks:
+    - name: DDNS依存パッケージをインストール
+      ansible.builtin.dnf:
+        name:
+          - curl
+          - jq
+        state: present
+
+    - name: Cloudflare秘密情報ディレクトリを作成
+      ansible.builtin.file:
+        path: /root/.secrets/cloudflare
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+
+    - name: Cloudflare DDNS環境変数を配置
+      ansible.builtin.template:
+        src: ../templates/ddns.env.j2
+        dest: /root/.secrets/cloudflare/ddns.env
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+
+    - name: Cloudflare DDNSスクリプトを配置
+      ansible.builtin.template:
+        src: ../templates/cloudflare-ddns.sh.j2
+        dest: /usr/local/bin/cloudflare-ddns.sh
+        owner: root
+        group: root
+        mode: '0700'
+        validate: '/bin/bash -n %s'
+
+    - name: Cloudflare DDNS serviceを配置
+      ansible.builtin.template:
+        src: ../templates/cloudflare-ddns.service.j2
+        dest: /etc/systemd/system/cloudflare-ddns.service
+        owner: root
+        group: root
+        mode: '0644'
+      notify: systemdを再読み込み
+
+    - name: Cloudflare DDNS timerを配置
+      ansible.builtin.template:
+        src: ../templates/cloudflare-ddns.timer.j2
+        dest: /etc/systemd/system/cloudflare-ddns.timer
+        owner: root
+        group: root
+        mode: '0644'
+      notify:
+        - systemdを再読み込み
+        - DDNS timerを再起動
+
+    - name: systemd設定変更を反映
+      ansible.builtin.meta: flush_handlers
+
+    - name: Cloudflare DDNS timerを起動・自動起動
+      ansible.builtin.systemd_service:
+        name: cloudflare-ddns.timer
+        state: started
+        enabled: true
+
+    - name: Cloudflare DDNS timer状態を確認
+      ansible.builtin.command:
+        cmd: systemctl is-active cloudflare-ddns.timer
+      register: ddns_timer_status
+      changed_when: false
+      check_mode: false
+
+    - name: Cloudflare DDNS timer自動起動を確認
+      ansible.builtin.command:
+        cmd: systemctl is-enabled cloudflare-ddns.timer
+      register: ddns_timer_enabled
+      changed_when: false
+      check_mode: false
+
+    - name: DDNS構築結果を表示
+      ansible.builtin.debug:
+        msg:
+          - "Timer: {{ ddns_timer_status.stdout }}"
+          - "Enabled: {{ ddns_timer_enabled.stdout }}"
+          - "Interval: {{ ddns_interval }}"
+          - "Records: {{ ddns_records | join(', ') }}"
+
+  handlers:
+    - name: systemdを再読み込み
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+
+    - name: DDNS timerを再起動
+      ansible.builtin.systemd_service:
+        name: cloudflare-ddns.timer
+        state: restarted

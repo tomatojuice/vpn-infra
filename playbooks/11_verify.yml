@@ -1,0 +1,247 @@
+---
+- name: VPNサーバー全体を検証
+  hosts: vpn_servers
+  become: true
+
+  tasks:
+    # ==================================================
+    # Services
+    # ==================================================
+
+    - name: 主要サービス状態を確認
+      ansible.builtin.command:
+        cmd: systemctl is-active {{ item }}
+      loop:
+        - docker
+        - nginx
+        - dnsmasq
+        - firewalld
+        - cloudflare-ddns.timer
+      register: service_status
+      changed_when: false
+      check_mode: false
+
+    - name: 主要サービスがすべてactiveであることを確認
+      ansible.builtin.assert:
+        that:
+          - item.stdout == "active"
+        fail_msg: "{{ item.item }} が active ではありません"
+        success_msg: "{{ item.item }}: active"
+      loop: "{{ service_status.results }}"
+
+    # ==================================================
+    # Docker
+    # ==================================================
+
+    - name: wg-easyコンテナ状態を確認
+      ansible.builtin.command:
+        cmd: docker inspect -f '{{ "{{" }}.State.Running{{ "}}" }}' {{ wg_easy_container }}
+      register: wg_running
+      changed_when: false
+      check_mode: false
+
+    - name: Xrayコンテナ状態を確認
+      ansible.builtin.command:
+        cmd: docker inspect -f '{{ "{{" }}.State.Running{{ "}}" }}' {{ xray_container }}
+      register: xray_running
+      changed_when: false
+      check_mode: false
+
+    - name: コンテナが起動していることを確認
+      ansible.builtin.assert:
+        that:
+          - wg_running.stdout == "true"
+          - xray_running.stdout == "true"
+        fail_msg: "wg-easy または Xray が停止しています"
+        success_msg: "wg-easy / Xray: running"
+
+    # ==================================================
+    # Ports
+    # ==================================================
+
+    - name: wg-easyポートを確認
+      ansible.builtin.command:
+        cmd: docker port {{ wg_easy_container }}
+      register: wg_ports
+      changed_when: false
+      check_mode: false
+
+    - name: Xrayポートを確認
+      ansible.builtin.command:
+        cmd: docker port {{ xray_container }}
+      register: xray_ports
+      changed_when: false
+      check_mode: false
+
+    - name: WireGuardと管理ポートの公開状態を検証
+      ansible.builtin.assert:
+        that:
+          - "'0.0.0.0:51820' in wg_ports.stdout"
+          - "'127.0.0.1:51821' in wg_ports.stdout"
+        fail_msg: "wg-easyのポート公開状態が想定と異なります"
+        success_msg: "WireGuard: 51820公開 / 管理画面: localhost限定"
+
+    - name: Xrayがlocalhost限定であることを確認
+      ansible.builtin.assert:
+        that:
+          - "'127.0.0.1:' ~ (xray_port | string) in xray_ports.stdout"
+        fail_msg: "Xrayのポートがlocalhost限定になっていません"
+        success_msg: "Xray: localhost限定"
+
+    # ==================================================
+    # Network
+    # ==================================================
+
+    - name: IPv4 forwardingを確認
+      ansible.builtin.command:
+        cmd: sysctl -n net.ipv4.ip_forward
+      register: ip_forward
+      changed_when: false
+      check_mode: false
+
+    - name: IPv4 forwardingが有効であることを確認
+      ansible.builtin.assert:
+        that:
+          - ip_forward.stdout == "1"
+        fail_msg: "net.ipv4.ip_forward が無効です"
+        success_msg: "IPv4 forwarding: enabled"
+
+    # ==================================================
+    # DNS
+    # ==================================================
+
+    - name: wg-admin DNSを確認
+      ansible.builtin.command:
+        cmd: dig @127.0.0.1 {{ wg_admin_domain }} A +short
+      register: dns_wg_admin
+      changed_when: false
+      check_mode: false
+
+    - name: Xray DNSを確認
+      ansible.builtin.command:
+        cmd: dig @127.0.0.1 {{ xray_domain }} A +short
+      register: dns_xray
+      changed_when: false
+      check_mode: false
+
+    - name: WireGuard IPv4 DNSを確認
+      ansible.builtin.command:
+        cmd: dig @127.0.0.1 {{ wg_domain }} A +short
+      register: dns_wg_ipv4
+      changed_when: false
+      check_mode: false
+
+    - name: WireGuard IPv6 DNSを確認
+      ansible.builtin.command:
+        cmd: dig @127.0.0.1 {{ wg_domain }} AAAA +short
+      register: dns_wg_ipv6
+      changed_when: false
+      check_mode: false
+
+    - name: DNS結果を検証
+      ansible.builtin.assert:
+        that:
+          - dns_wg_admin.stdout | trim == lan_ipv4
+          - dns_xray.stdout | trim == lan_ipv4
+          - dns_wg_ipv4.stdout | trim == lan_ipv4
+          - dns_wg_ipv6.stdout | trim == ula_ipv6
+        fail_msg: "dnsmasqの名前解決結果が想定と異なります"
+        success_msg: "dnsmasq: 名前解決正常"
+
+    # ==================================================
+    # Nginx
+    # ==================================================
+
+    - name: Nginx設定を検証
+      ansible.builtin.command:
+        cmd: nginx -t
+      register: nginx_test
+      changed_when: false
+      check_mode: false
+
+    - name: Nginx設定が正常であることを確認
+      ansible.builtin.assert:
+        that:
+          - nginx_test.rc == 0
+        fail_msg: "Nginx設定に問題があります"
+        success_msg: "Nginx configuration: OK"
+
+    # ==================================================
+    # Certificates
+    # ==================================================
+
+    - name: wg-admin証明書を確認
+      ansible.builtin.stat:
+        path: "/etc/letsencrypt/live/{{ wg_admin_domain }}/fullchain.pem"
+      register: wg_cert
+
+    - name: Xray証明書を確認
+      ansible.builtin.stat:
+        path: "/etc/letsencrypt/live/{{ xray_domain }}/fullchain.pem"
+      register: xray_cert
+
+    - name: TLS証明書が存在することを確認
+      ansible.builtin.assert:
+        that:
+          - wg_cert.stat.exists
+          - xray_cert.stat.exists
+        fail_msg: "TLS証明書が見つかりません"
+        success_msg: "Let's Encrypt certificates: OK"
+
+    # ==================================================
+    # firewalld
+    # ==================================================
+
+    - name: publicゾーンの公開ポートを確認
+      ansible.builtin.command:
+        cmd: firewall-cmd --zone={{ firewalld_zone }} --list-ports
+      register: firewall_ports
+      changed_when: false
+      check_mode: false
+
+    - name: firewalld公開ポートを検証
+      ansible.builtin.assert:
+        that:
+          - "'51820/udp' in firewall_ports.stdout"
+          - "'51821/tcp' not in firewall_ports.stdout"
+        fail_msg: "firewalldの公開ポートが想定と異なります"
+        success_msg: "firewalld: 51820/udpのみ公開"
+
+    # ==================================================
+    # DDNS
+    # ==================================================
+
+    - name: DDNS timer自動起動を確認
+      ansible.builtin.command:
+        cmd: systemctl is-enabled cloudflare-ddns.timer
+      register: ddns_enabled
+      changed_when: false
+      check_mode: false
+
+    - name: DDNS timerが有効であることを確認
+      ansible.builtin.assert:
+        that:
+          - ddns_enabled.stdout == "enabled"
+        fail_msg: "Cloudflare DDNS timerが自動起動になっていません"
+        success_msg: "Cloudflare DDNS timer: enabled"
+
+    # ==================================================
+    # Summary
+    # ==================================================
+
+    - name: VPNサーバー検証結果を表示
+      ansible.builtin.debug:
+        msg:
+          - "================================"
+          - "VPN Server Verification: SUCCESS"
+          - "================================"
+          - "WireGuard: running"
+          - "Xray: running"
+          - "Nginx: active"
+          - "dnsmasq: active"
+          - "firewalld: active"
+          - "DDNS timer: active"
+          - "WireGuard UDP: 51820"
+          - "wg-easy Admin: 127.0.0.1:51821"
+          - "Xray backend: 127.0.0.1:{{ xray_port }}"
+          

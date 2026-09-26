@@ -1,0 +1,110 @@
+---
+- name: Certbot環境を構築
+  hosts: vpn_servers
+  become: true
+
+  tasks:
+
+    # ==================================================
+    # Certbot
+    # ==================================================
+
+    - name: Certbot関連パッケージをインストール
+      ansible.builtin.dnf:
+        name:
+          - certbot
+          - python3-certbot-dns-cloudflare
+        state: present
+
+    # ==================================================
+    # Cloudflare Credentials
+    # ==================================================
+
+    - name: Certbot秘密情報ディレクトリを作成
+      ansible.builtin.file:
+        path: "{{ certbot_credentials_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+
+    - name: Cloudflare APIトークン設定を配置
+      ansible.builtin.template:
+        src: ../templates/cloudflare.ini.j2
+        dest: "{{ certbot_credentials_file }}"
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+
+    # ==================================================
+    # 既存証明書確認
+    # ==================================================
+
+    - name: wg-admin証明書の存在を確認
+      ansible.builtin.stat:
+        path: "/etc/letsencrypt/live/{{ wg_admin_domain }}/fullchain.pem"
+      register: wg_admin_cert
+
+    - name: Xray証明書の存在を確認
+      ansible.builtin.stat:
+        path: "/etc/letsencrypt/live/{{ xray_domain }}/fullchain.pem"
+      register: xray_cert
+
+    # ==================================================
+    # 証明書取得
+    # ==================================================
+
+    - name: wg-admin証明書を取得
+      ansible.builtin.command:
+        cmd: >
+          certbot certonly
+          --dns-cloudflare
+          --dns-cloudflare-credentials {{ certbot_credentials_file }}
+          --non-interactive
+          --agree-tos
+          --email {{ vault_certbot_email }}
+          -d {{ wg_admin_domain }}
+      when:
+        - not wg_admin_cert.stat.exists
+
+    - name: Xray証明書を取得
+      ansible.builtin.command:
+        cmd: >
+          certbot certonly
+          --dns-cloudflare
+          --dns-cloudflare-credentials {{ certbot_credentials_file }}
+          --non-interactive
+          --agree-tos
+          --email {{ certbot_email }}
+          -d {{ xray_domain }}
+      when:
+        - not xray_cert.stat.exists
+
+    # ==================================================
+    # 証明書確認
+    # ==================================================
+
+    - name: Certbot証明書一覧を確認
+      ansible.builtin.command:
+        cmd: certbot certificates
+      register: certbot_certificates
+      changed_when: false
+      check_mode: false
+
+    - name: wg-admin証明書ファイルを確認
+      ansible.builtin.stat:
+        path: "/etc/letsencrypt/live/{{ wg_admin_domain }}/fullchain.pem"
+      register: wg_admin_cert_final
+
+    - name: Xray証明書ファイルを確認
+      ansible.builtin.stat:
+        path: "/etc/letsencrypt/live/{{ xray_domain }}/fullchain.pem"
+      register: xray_cert_final
+
+    - name: Certbot構築結果を表示
+      ansible.builtin.debug:
+        msg:
+          - "wg-admin certificate: {{ wg_admin_cert_final.stat.exists }}"
+          - "Xray certificate: {{ xray_cert_final.stat.exists }}"
+          - "Cloudflare credentials: {{ certbot_credentials_file }}"

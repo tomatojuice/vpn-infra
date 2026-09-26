@@ -1,0 +1,141 @@
+---
+# ==============================
+# サーバー基本情報
+# ==============================
+
+server_hostname: "vpn-n100"
+
+# ==============================
+# LAN ネットワークで使用するIPv4設定
+# ==============================
+
+lan_interface: "enp1s0"
+
+# WireGuard/Xrayサーバのアドレス
+lan_ipv4: "192.168.1.13"
+lan_ipv4_prefix: 24
+lan_ipv4_network: "192.168.1.0/24"
+
+# ルータのデフォルトゲートウェイ
+default_gateway_ipv4: "192.168.1.1"
+
+# NetworkManagerの接続名
+lan_connection: "enp1s0"
+
+# ==============================
+# IPv6 ULA
+# ==============================
+
+ula_ipv6: "fd9d:2ffd:5b35:1::13"
+ula_ipv6_prefix: 64
+
+ula_ipv6_network: "fd9d:2ffd:5b35:1::/64"
+ula_prefix: "fd9d:2ffd:5b35:1::"
+
+# ==============================
+# Network
+# ==============================
+
+ipv4_forward: 1
+
+nat_modules:
+  - iptable_nat
+  - ip6table_nat
+
+# ==============================
+# WireGuard / wg-easy
+# ==============================
+
+wg_domain: "vpn.ratolab.uk"
+wg_port: 51820
+
+wg_admin_domain: "wg-admin.ratolab.uk"
+wg_admin_port: 51821
+
+wg_easy_dir: "/root/wg-easy"
+wg_easy_container: "wg-easy"
+wg_easy_image: "ghcr.io/wg-easy/wg-easy:15"
+
+# ==============================
+# Xray
+# ==============================
+
+xray_dir: "/root/xray"
+
+xray_domain: "xray.ratolab.uk"
+
+xray_image: "teddysun/xray:latest"
+xray_container: "xray"
+
+xray_port: 10080
+xray_ws_path: "/secret-tunnel"
+
+xray_client_names:
+  - seeker_ramya
+  - seeker_tomato
+  - iPhone_17
+  - Yoga
+  - MacBookAir
+
+# ==============================
+# Cloudflare
+# ==============================
+
+cloudflare_zone: "ratolab.uk"
+
+ddns_records:
+  - "vpn.ratolab.uk"
+  - "xray.ratolab.uk"
+
+ddns_interval: "6h"
+ddns_ttl: 300
+
+# ==============================
+# Certbot / Let's Encrypt
+# ==============================
+
+certbot_credentials_dir: "/root/.secrets/certbot"
+certbot_credentials_file: "/root/.secrets/certbot/cloudflare.ini"
+
+certbot_domains:
+  - "{{ wg_admin_domain }}"
+  - "{{ xray_domain }}"
+
+# ==============================
+# dnsmasq
+# ==============================
+
+dnsmasq_interface: "{{ lan_interface }}"
+
+dnsmasq_listen_addresses:
+  - "127.0.0.1"
+  - "{{ lan_ipv4 }}"
+  - "{{ ula_ipv6 }}"
+
+dnsmasq_records:
+  - domain: "{{ wg_admin_domain }}"
+    ipv4: "{{ lan_ipv4 }}"
+
+  - domain: "{{ xray_domain }}"
+    ipv4: "{{ lan_ipv4 }}"
+
+  - domain: "{{ wg_domain }}"
+    ipv4: "{{ lan_ipv4 }}"
+    ipv6: "{{ ula_ipv6 }}"
+
+# ==============================
+# firewalld
+# ==============================
+
+firewalld_zone: "public"
+
+firewalld_services:
+  - cockpit
+  - dhcpv6-client
+  - dns
+  - http
+  - https
+  - ssh
+
+firewalld_ports:
+  - "51820/udp"

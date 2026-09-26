@@ -1,0 +1,63 @@
+---
+- name: Nginx環境を構築
+  hosts: vpn_servers
+  become: true
+
+  tasks:
+    - name: Nginxをインストール
+      ansible.builtin.dnf:
+        name: nginx
+        state: present
+
+    - name: Nginxを起動・自動起動
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+
+    - name: wg-easy Nginx設定を配置
+      ansible.builtin.template:
+        src: ../templates/wg-easy.conf.j2
+        dest: /etc/nginx/conf.d/wg-easy.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Nginxを再読み込み
+
+    - name: Xray Nginx設定を配置
+      ansible.builtin.template:
+        src: ../templates/xray.conf.j2
+        dest: /etc/nginx/conf.d/xray.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Nginxを再読み込み
+
+    - name: Nginx設定を検証
+      ansible.builtin.command:
+        cmd: nginx -t
+      changed_when: false
+      check_mode: false
+
+    - name: Nginx設定変更を反映
+      ansible.builtin.meta: flush_handlers
+
+    - name: Nginxサービス状態を確認
+      ansible.builtin.command:
+        cmd: systemctl is-active nginx
+      register: nginx_status
+      changed_when: false
+      check_mode: false
+
+    - name: Nginx構築結果を表示
+      ansible.builtin.debug:
+        msg:
+          - "nginx: {{ nginx_status.stdout }}"
+          - "wg-admin: https://{{ wg_admin_domain }}"
+          - "Xray: https://{{ xray_domain }}{{ xray_ws_path }}"
+
+  handlers:
+    - name: Nginxを再読み込み
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded

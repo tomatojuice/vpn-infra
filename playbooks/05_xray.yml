@@ -1,0 +1,134 @@
+---
+- name: Xray環境を構築
+  hosts: vpn_servers
+  become: true
+
+  tasks:
+
+    # ==================================================
+    # ディレクトリ
+    # ==================================================
+
+    - name: Xrayディレクトリを作成
+      ansible.builtin.file:
+        path: "{{ xray_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Xray設定ディレクトリを作成
+      ansible.builtin.file:
+        path: "{{ xray_dir }}/config"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    # ==================================================
+    # Docker Compose
+    # ==================================================
+
+    - name: Xray Docker Compose設定を配置
+      ansible.builtin.template:
+        src: ../templates/xray-compose.yml.j2
+        dest: "{{ xray_dir }}/docker-compose.yml"
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Xrayを再構築
+
+    # ==================================================
+    # Xray config.json
+    # ==================================================
+
+    - name: Xray設定ファイルを配置
+      ansible.builtin.template:
+        src: ../templates/xray-config.json.j2
+        dest: "{{ xray_dir }}/config/config.json"
+        owner: root
+        group: root
+        mode: '0644'
+        validate: 'python3 -m json.tool %s'
+      notify: Xrayを再構築
+
+    # ==================================================
+    # Docker Compose構文確認
+    # ==================================================
+
+    - name: Xray Docker Compose設定を検証
+      ansible.builtin.command:
+        cmd: docker compose config --quiet
+        chdir: "{{ xray_dir }}"
+      changed_when: false
+      check_mode: false
+
+    # ==================================================
+    # Handlerを反映
+    # ==================================================
+
+    - name: Xray設定変更を反映
+      ansible.builtin.meta: flush_handlers
+
+    # ==================================================
+    # コンテナ起動確認
+    # ==================================================
+
+    - name: Xrayコンテナの起動状態を確認
+      ansible.builtin.command:
+        cmd: >
+          docker ps
+          --quiet
+          --filter name=^/{{ xray_container }}$
+      register: xray_running
+      changed_when: false
+      check_mode: false
+
+    - name: Xrayコンテナを起動
+      ansible.builtin.command:
+        cmd: docker compose up -d
+        chdir: "{{ xray_dir }}"
+      when:
+        - xray_running.stdout | trim == ""
+
+    # ==================================================
+    # 最終確認
+    # ==================================================
+
+    - name: Xrayコンテナ状態を確認
+      ansible.builtin.command:
+        cmd: docker ps --filter name=^/{{ xray_container }}$
+      register: xray_status
+      changed_when: false
+      check_mode: false
+
+    - name: Xrayポートを確認
+      ansible.builtin.command:
+        cmd: docker port {{ xray_container }} 10080/tcp
+      register: xray_port_result
+      changed_when: false
+      check_mode: false
+
+    - name: Xrayログを確認
+      ansible.builtin.command:
+        cmd: docker logs --tail 10 {{ xray_container }}
+      register: xray_logs
+      changed_when: false
+      check_mode: false
+
+    - name: Xray構築結果を表示
+      ansible.builtin.debug:
+        msg:
+          - "Container: {{ xray_container }}"
+          - "Image: {{ xray_image }}"
+          - "Port: {{ xray_port_result.stdout }}"
+          - "WebSocket Path: {{ xray_ws_path }}"
+          - "Compose: {{ xray_dir }}/docker-compose.yml"
+          - "Config: {{ xray_dir }}/config/config.json"
+
+  handlers:
+
+    - name: Xrayを再構築
+      ansible.builtin.command:
+        cmd: docker compose up -d --force-recreate xray
+        chdir: "{{ xray_dir }}"

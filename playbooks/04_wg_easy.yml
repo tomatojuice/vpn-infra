@@ -1,0 +1,108 @@
+---
+- name: wg-easy環境を構築
+  hosts: vpn_servers
+  become: true
+
+  tasks:
+
+    # ==================================================
+    # ディレクトリ
+    # ==================================================
+
+    - name: wg-easyディレクトリを作成
+      ansible.builtin.file:
+        path: "{{ wg_easy_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: WireGuard永続データディレクトリを作成
+      ansible.builtin.file:
+        path: "{{ wg_easy_dir }}/wireguard"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    # ==================================================
+    # Compose設定確認
+    # ==================================================
+
+    - name: wg-easy Docker Compose設定を配置
+      ansible.builtin.template:
+        src: ../templates/wg-easy-compose.yml.j2
+        dest: "{{ wg_easy_dir }}/docker-compose.yml"
+        owner: root
+        group: root
+        mode: '0644'
+      notify: wg-easyを再構築
+
+    # ==================================================
+    # 設定変更があればここで反映
+    # ==================================================
+
+    - name: wg-easy設定変更を反映
+      ansible.builtin.meta: flush_handlers
+
+    # ==================================================
+    # コンテナ起動確認
+    # ==================================================
+
+    - name: wg-easyコンテナの起動状態を確認
+      ansible.builtin.command:
+        cmd: >
+          docker ps
+          --quiet
+          --filter name=^/{{ wg_easy_container }}$
+      register: wg_easy_running
+      changed_when: false
+      check_mode: false
+
+    - name: wg-easyコンテナを起動
+      ansible.builtin.command:
+        cmd: docker compose up -d
+        chdir: "{{ wg_easy_dir }}"
+      when:
+        - wg_easy_running.stdout | trim == ""
+
+    # ==================================================
+    # 最終確認
+    # ==================================================
+
+    - name: wg-easyコンテナ状態を確認
+      ansible.builtin.command:
+        cmd: docker ps --filter name=^/{{ wg_easy_container }}$
+      register: wg_easy_status
+      changed_when: false
+      check_mode: false
+
+    - name: wg-easy UDPポートを確認
+      ansible.builtin.command:
+        cmd: docker port {{ wg_easy_container }} 51820/udp
+      register: wg_udp_port
+      changed_when: false
+      check_mode: false
+
+    - name: wg-easy管理ポートを確認
+      ansible.builtin.command:
+        cmd: docker port {{ wg_easy_container }} 51821/tcp
+      register: wg_admin_port_result
+      changed_when: false
+      check_mode: false
+
+    - name: wg-easy構築結果を表示
+      ansible.builtin.debug:
+        msg:
+          - "Container: {{ wg_easy_container }}"
+          - "Image: {{ wg_easy_image }}"
+          - "WireGuard UDP: {{ wg_udp_port.stdout }}"
+          - "Admin TCP: {{ wg_admin_port_result.stdout }}"
+          - "Compose: {{ wg_easy_dir }}/docker-compose.yml"
+
+  handlers:
+
+    - name: wg-easyを再構築
+      ansible.builtin.command:
+        cmd: docker compose up -d
+        chdir: "{{ wg_easy_dir }}"

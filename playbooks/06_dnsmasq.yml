@@ -1,0 +1,113 @@
+---
+- name: dnsmasq環境を構築
+  hosts: vpn_servers
+  become: true
+
+  tasks:
+
+    # ==================================================
+    # dnsmasq
+    # ==================================================
+
+    - name: dnsmasqをインストール
+      ansible.builtin.dnf:
+        name: dnsmasq
+        state: present
+
+    # ==================================================
+    # 設定ファイル
+    # ==================================================
+
+    - name: dnsmasq設定ファイルを配置
+      ansible.builtin.template:
+        src: ../templates/dnsmasq.conf.j2
+        dest: /etc/dnsmasq.conf
+        owner: root
+        group: root
+        mode: '0644'
+        backup: true
+        validate: 'dnsmasq --test --conf-file=%s'
+      notify: dnsmasqを再起動
+
+    # ==================================================
+    # 設定検証
+    # ==================================================
+
+    - name: dnsmasq設定を検証
+      ansible.builtin.command:
+        cmd: dnsmasq --test
+      register: dnsmasq_test
+      changed_when: false
+      check_mode: false
+
+    # ==================================================
+    # サービス
+    # ==================================================
+
+    - name: dnsmasqを起動・自動起動
+      ansible.builtin.service:
+        name: dnsmasq
+        state: started
+        enabled: true
+
+    # ==================================================
+    # 設定反映
+    # ==================================================
+
+    - name: dnsmasq設定変更を反映
+      ansible.builtin.meta: flush_handlers
+
+    # ==================================================
+    # 最終確認
+    # ==================================================
+
+    - name: dnsmasqサービス状態を確認
+      ansible.builtin.command:
+        cmd: systemctl is-active dnsmasq
+      register: dnsmasq_status
+      changed_when: false
+      check_mode: false
+
+    - name: wg-admin名前解決を確認
+      ansible.builtin.command:
+        cmd: dig @127.0.0.1 {{ wg_admin_domain }} +short
+      register: wg_admin_dns
+      changed_when: false
+      check_mode: false
+
+    - name: Xray名前解決を確認
+      ansible.builtin.command:
+        cmd: dig @127.0.0.1 {{ xray_domain }} +short
+      register: xray_dns
+      changed_when: false
+      check_mode: false
+
+    - name: WireGuard IPv4名前解決を確認
+      ansible.builtin.command:
+        cmd: dig @127.0.0.1 {{ wg_domain }} A +short
+      register: wg_dns_ipv4
+      changed_when: false
+      check_mode: false
+
+    - name: WireGuard IPv6名前解決を確認
+      ansible.builtin.command:
+        cmd: dig @127.0.0.1 {{ wg_domain }} AAAA +short
+      register: wg_dns_ipv6
+      changed_when: false
+      check_mode: false
+
+    - name: dnsmasq構築結果を表示
+      ansible.builtin.debug:
+        msg:
+          - "dnsmasq: {{ dnsmasq_status.stdout }}"
+          - "{{ wg_admin_domain }}: {{ wg_admin_dns.stdout }}"
+          - "{{ xray_domain }}: {{ xray_dns.stdout }}"
+          - "{{ wg_domain }} IPv4: {{ wg_dns_ipv4.stdout }}"
+          - "{{ wg_domain }} IPv6: {{ wg_dns_ipv6.stdout }}"
+
+  handlers:
+
+    - name: dnsmasqを再起動
+      ansible.builtin.service:
+        name: dnsmasq
+        state: restarted

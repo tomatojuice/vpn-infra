@@ -1,0 +1,19 @@
+---
+- name: 変数読み込みテスト
+  hosts: vpn_servers
+  become: true
+
+  tasks:
+    - name: 基本変数を表示
+      ansible.builtin.debug:
+        msg:
+          - "ホスト名: {{ server_hostname }}"
+          - "LAN IP: {{ lan_ipv4 }}"
+          - "WireGuard: {{ wg_domain }}:{{ wg_port }}"
+          - "wg-easy管理画面: {{ wg_admin_domain }}:{{ wg_admin_port }}"
+          - "Xray: {{ xray_domain }}:443"
+          - "Xray内部ポート: {{ xray_port }}"
+          - "WebSocket Path: {{ xray_ws_path }}"
+          - "Xrayクライアント: {{ xray_client_names }}"
+          - "DDNS対象: {{ ddns_records }}"
+          - "DDNS間隔: {{ ddns_interval }}"

@@ -1,0 +1,196 @@
+---
+- name: VPNサーバー ネットワーク環境を構築
+  hosts: vpn_servers
+  become: true
+
+  tasks:
+
+    # ==================================================
+    # NetworkManager 接続確認
+    # ==================================================
+
+    - name: NetworkManager接続一覧を確認
+      ansible.builtin.command:
+        cmd: nmcli -t -f NAME connection show
+      register: nm_connections
+      changed_when: false
+      check_mode: false
+
+    - name: LAN接続が存在するか確認
+      ansible.builtin.assert:
+        that:
+          - lan_connection in nm_connections.stdout_lines
+        fail_msg: "NetworkManager接続 {{ lan_connection }} が見つかりません"
+        success_msg: "NetworkManager接続 {{ lan_connection }} を確認しました"
+
+    # ==================================================
+    # IPv4
+    # ==================================================
+
+    - name: 現在のIPv4設定を取得
+      ansible.builtin.command:
+        cmd: nmcli -g ipv4.addresses connection show {{ lan_connection }}
+      register: current_ipv4
+      changed_when: false
+      check_mode: false
+
+    - name: IPv4アドレスを設定
+      ansible.builtin.command:
+        cmd: >
+          nmcli connection modify {{ lan_connection }}
+          ipv4.addresses {{ lan_ipv4 }}/{{ lan_ipv4_prefix }}
+      when:
+        - (lan_ipv4 ~ '/' ~ lan_ipv4_prefix) not in current_ipv4.stdout
+      notify: NetworkManager接続を再適用
+
+    # ==================================================
+    # IPv4 Gateway
+    # ==================================================
+
+    - name: 現在のIPv4ゲートウェイを取得
+      ansible.builtin.command:
+        cmd: nmcli -g ipv4.gateway connection show {{ lan_connection }}
+      register: current_gateway
+      changed_when: false
+      check_mode: false
+
+    - name: IPv4デフォルトゲートウェイを設定
+      ansible.builtin.command:
+        cmd: >
+          nmcli connection modify {{ lan_connection }}
+          ipv4.gateway {{ default_gateway_ipv4 }}
+      when:
+        - current_gateway.stdout != default_gateway_ipv4
+      notify: NetworkManager接続を再適用
+
+    # ==================================================
+    # IPv6 ULA
+    # ==================================================
+
+    # --escape no を付けると普通のIPv6表記で返る。つけないと、¥エスケープ文字が入る
+    - name: 現在のIPv6アドレス設定を取得
+      ansible.builtin.command:
+        cmd: nmcli --escape no -g ipv6.addresses connection show {{ lan_connection }}
+      register: current_ipv6
+      changed_when: false
+      check_mode: false
+
+    - name: IPv6 ULAを追加
+      ansible.builtin.command:
+        cmd: >
+          nmcli connection modify {{ lan_connection }}
+          +ipv6.addresses {{ ula_ipv6 }}/{{ ula_ipv6_prefix }}
+      when:
+        - (ula_ipv6 ~ '/' ~ ula_ipv6_prefix) not in current_ipv6.stdout
+      notify: NetworkManager接続を再適用
+
+    # ==================================================
+    # IPv4 Forwarding
+    # ==================================================
+
+    - name: IPv4 Forwarding永続設定を配置
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/99-vpn-forwarding.conf
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          net.ipv4.ip_forward = {{ ipv4_forward }}
+      notify: sysctl設定を再読込
+
+    - name: 現在のIPv4 Forwardingを確認
+      ansible.builtin.command:
+        cmd: sysctl -n net.ipv4.ip_forward
+      register: forward_result
+      changed_when: false
+      check_mode: false
+
+    # ==================================================
+    # NATカーネルモジュール
+    # ==================================================
+
+    - name: NATモジュール永続化設定を配置
+      ansible.builtin.copy:
+        dest: /etc/modules-load.d/wg-easy.conf
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          {% for module in nat_modules %}
+          {{ module }}
+          {% endfor %}
+
+    - name: NATモジュールをロード
+      ansible.builtin.command:
+        cmd: modprobe {{ item }}
+      loop: "{{ nat_modules }}"
+      changed_when: false
+      check_mode: false
+
+    # ==================================================
+    # Handlerをここで実行
+    # ==================================================
+
+    - name: 保留中のネットワーク設定を反映
+      ansible.builtin.meta: flush_handlers
+
+    # ==================================================
+    # 最終確認
+    # ==================================================
+
+    - name: 実際のIPv4アドレスを確認
+      ansible.builtin.command:
+        cmd: ip -4 -o addr show dev {{ lan_interface }}
+      register: ipv4_result
+      changed_when: false
+      check_mode: false
+
+    - name: 実際のIPv6アドレスを確認
+      ansible.builtin.command:
+        cmd: ip -6 -o addr show dev {{ lan_interface }}
+      register: ipv6_result
+      changed_when: false
+      check_mode: false
+
+    - name: IPv4アドレス最終確認
+      ansible.builtin.assert:
+        that:
+          - lan_ipv4 in ipv4_result.stdout
+        fail_msg: "IPv4 {{ lan_ipv4 }} が設定されていません"
+        success_msg: "IPv4 {{ lan_ipv4 }} を確認しました"
+      when: not ansible_check_mode
+
+    - name: IPv6 ULA最終確認
+      ansible.builtin.assert:
+        that:
+          - ula_ipv6 in ipv6_result.stdout
+        fail_msg: "IPv6 ULA {{ ula_ipv6 }} が設定されていません"
+        success_msg: "IPv6 ULA {{ ula_ipv6 }} を確認しました"
+      when: not ansible_check_mode
+
+    - name: IPv4 Forwarding最終確認
+      ansible.builtin.command:
+        cmd: sysctl -n net.ipv4.ip_forward
+      register: forward_final
+      changed_when: false
+      check_mode: false
+
+    - name: ネットワーク構築結果を表示
+      ansible.builtin.debug:
+        msg:
+          - "インターフェース: {{ lan_interface }}"
+          - "IPv4: {{ lan_ipv4 }}/{{ lan_ipv4_prefix }}"
+          - "Gateway: {{ default_gateway_ipv4 }}"
+          - "IPv6 ULA: {{ ula_ipv6 }}/{{ ula_ipv6_prefix }}"
+          - "IPv4 Forwarding: {{ forward_final.stdout }}"
+          - "NAT Modules: {{ nat_modules }}"
+
+  handlers:
+
+    - name: NetworkManager接続を再適用
+      ansible.builtin.command:
+        cmd: nmcli connection up {{ lan_connection }}
+
+    - name: sysctl設定を再読込
+      ansible.builtin.command:
+        cmd: sysctl --system

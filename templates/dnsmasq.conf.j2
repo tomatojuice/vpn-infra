@@ -1,0 +1,45 @@
+# ==================================================
+# dnsmasq Process
+# ==================================================
+
+user=dnsmasq
+group=dnsmasq
+
+# ==================================================
+# Local DNS
+# ==================================================
+
+{% for record in dnsmasq_records %}
+address=/{{ record.domain }}/{{ record.ipv4 }}
+{% if record.ipv6 is defined %}
+address=/{{ record.domain }}/{{ record.ipv6 }}
+{% endif %}
+{% endfor %}
+
+# ==================================================
+# Listen
+# ==================================================
+
+listen-address={% for addr in dnsmasq_listen_addresses %}{{ addr }}{% if not loop.last %},{% endif %}{% endfor %}
+
+local-service=host
+
+# アドレス追加・変更にも追従して待ち受ける
+bind-dynamic
+
+# ==================================================
+# IPv6 Router Advertisement
+# ==================================================
+
+enable-ra
+interface={{ dnsmasq_interface }}
+dhcp-range={{ ula_prefix }},ra-only,64,12h
+
+# RAは送信するが、N100をIPv6デフォルトルータにはしない
+ra-param={{ dnsmasq_interface }},0,0
+
+# ==================================================
+# Additional configuration
+# ==================================================
+
+conf-dir=/etc/dnsmasq.d,.rpmnew,.rpmsave,.rpmorig

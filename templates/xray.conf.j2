@@ -1,0 +1,24 @@
+server {
+    listen 443 ssl;
+    server_name {{ xray_domain }};
+
+    ssl_certificate /etc/letsencrypt/live/{{ xray_domain }}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{ xray_domain }}/privkey.pem;
+
+    location {{ xray_ws_path }} {
+        proxy_pass http://127.0.0.1:{{ xray_port }};
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    # それ以外のURLには何も出さない
+    location / {
+        return 404;
+    }
+}

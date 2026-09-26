@@ -1,0 +1,12 @@
+---
+- import_playbook: 01_base.yml
+- import_playbook: 02_network.yml
+- import_playbook: 03_docker.yml
+- import_playbook: 04_wg_easy.yml
+- import_playbook: 05_xray.yml
+- import_playbook: 06_dnsmasq.yml
+- import_playbook: 07_certbot.yml
+- import_playbook: 08_nginx.yml
+- import_playbook: 09_ddns.yml
+- import_playbook: 10_firewalld.yml
+- import_playbook: 11_verify.yml

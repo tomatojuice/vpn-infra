@@ -1,0 +1,15 @@
+---
+- name: Nginxの稼働確認と管理
+  hosts: vpn_servers
+  become: true
+  tasks:
+    - name: Nginxパッケージがインストールされていることを確認
+      ansible.builtin.dnf:
+        name: nginx
+        state: present
+
+    - name: Nginxが起動し、自動起動が有効であることを確認
+      ansible.builtin.systemd:
+        name: nginx
+        state: started
+        enabled: true

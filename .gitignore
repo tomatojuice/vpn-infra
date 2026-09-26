@@ -1,0 +1,29 @@
+# Ansible Vault / secrets
+inventory/group_vars/all/vault.yml
+*.vault
+*.key
+*.pem
+
+# Cloudflare / credentials
+*.env
+cloudflare.ini
+
+# WireGuard
+wg0.conf
+*.conf
+
+# Databases
+*.db
+
+# Backup / temporary files
+*.bak
+*.backup
+*.rpmnew
+*.rpmsave
+*.rpmorig
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*~

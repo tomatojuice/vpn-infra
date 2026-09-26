@@ -1,0 +1,53 @@
+---
+- name: firewalld環境を構築
+  hosts: vpn_servers
+  become: true
+
+  tasks:
+    - name: firewalldをインストール
+      ansible.builtin.dnf:
+        name: firewalld
+        state: present
+
+    - name: firewalldを起動・自動起動
+      ansible.builtin.service:
+        name: firewalld
+        state: started
+        enabled: true
+
+    - name: 必要なfirewalldサービスを許可
+      ansible.posix.firewalld:
+        zone: "{{ firewalld_zone }}"
+        service: "{{ item }}"
+        state: enabled
+        permanent: true
+        immediate: true
+      loop: "{{ firewalld_services }}"
+
+    - name: 必要なfirewalldポートを許可
+      ansible.posix.firewalld:
+        zone: "{{ firewalld_zone }}"
+        port: "{{ item }}"
+        state: enabled
+        permanent: true
+        immediate: true
+      loop: "{{ firewalld_ports }}"
+
+    - name: wg-easy管理ポートの直接公開を削除
+      ansible.posix.firewalld:
+        zone: "{{ firewalld_zone }}"
+        port: "{{ wg_admin_port }}/tcp"
+        state: disabled
+        permanent: true
+        immediate: true
+
+    - name: publicゾーン設定を確認
+      ansible.builtin.command:
+        cmd: firewall-cmd --zone={{ firewalld_zone }} --list-all
+      register: firewalld_status
+      changed_when: false
+      check_mode: false
+
+    - name: firewalld構築結果を表示
+      ansible.builtin.debug:
+        var: firewalld_status.stdout_lines

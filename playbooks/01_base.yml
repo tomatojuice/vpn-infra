@@ -1,0 +1,45 @@
+---
+- name: VPNサーバー基本環境を構築
+  hosts: vpn_servers
+  become: true
+
+  tasks:
+
+    - name: ホスト名を設定
+      ansible.builtin.hostname:
+        name: "{{ server_hostname }}"
+
+    - name: 基本パッケージをインストール
+      ansible.builtin.dnf:
+        name:
+          - curl
+          - wget
+          - jq
+          - vim
+          - bind-utils
+          - openssl
+          - firewalld
+        state: present
+
+    - name: firewalldを起動・自動起動
+      ansible.builtin.service:
+        name: firewalld
+        state: started
+        enabled: true
+
+    - name: ホスト名を確認
+      ansible.builtin.command: hostname
+      register: hostname_result
+      changed_when: false
+
+    - name: firewalldの状態を確認
+      ansible.builtin.command: firewall-cmd --state
+      register: firewalld_result
+      changed_when: false
+
+    - name: 基本環境構築結果を表示
+      ansible.builtin.debug:
+        msg:
+          - "ホスト名: {{ hostname_result.stdout }}"
+          - "基本パッケージ: 導入確認完了"
+          - "firewalld: {{ firewalld_result.stdout }}"

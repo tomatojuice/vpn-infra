@@ -1,0 +1,12 @@
+services:
+  xray:
+    image: {{ xray_image }}
+    container_name: {{ xray_container }}
+
+    restart: unless-stopped
+
+    volumes:
+      - ./config:/etc/xray
+
+    ports:
+      - "127.0.0.1:{{ xray_port }}:10080"
